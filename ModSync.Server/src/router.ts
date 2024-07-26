@@ -54,7 +54,7 @@ export class Router {
 		res.setHeader("Content-Type", "application/json");
 		res.writeHead(200, "OK");
 		res.end(
-			JSON.stringify(this.syncUtil.hashModFiles(this.config.enabledSyncPaths)),
+			this.syncUtil.getHashModFiles(),
 		);
 	}
 

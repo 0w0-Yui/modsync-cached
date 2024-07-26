@@ -13,68 +13,77 @@ import { Router } from "./router";
 import type { PreSptModLoader } from "@spt/loaders/PreSptModLoader";
 
 class Mod implements IPreSptLoadMod {
-	private static container: DependencyContainer;
+  private static container: DependencyContainer;
 
-	private static loadFailed = false;
-	private static config: Config;
+  private static loadFailed = false;
+  private static config: Config;
 
-	public preSptLoad(container: DependencyContainer): void {
-		Mod.container = container;
-		const logger = container.resolve<ILogger>("WinstonLogger");
-		const vfs = container.resolve<VFS>("VFS");
-		const jsonUtil = container.resolve<JsonUtil>("JsonUtil");
-		const modImporter = container.resolve<PreSptModLoader>("PreSptModLoader");
-		const configUtil = new ConfigUtil(vfs, jsonUtil, modImporter, logger);
-		const httpListenerService = container.resolve<HttpListenerModService>(
-			"HttpListenerModService",
-		);
+  public preSptLoad(container: DependencyContainer): void {
+    Mod.container = container;
+    const logger = container.resolve<ILogger>("WinstonLogger");
+    const vfs = container.resolve<VFS>("VFS");
+    const jsonUtil = container.resolve<JsonUtil>("JsonUtil");
+    const modImporter = container.resolve<PreSptModLoader>("PreSptModLoader");
+    const configUtil = new ConfigUtil(vfs, jsonUtil, modImporter, logger);
+    const httpListenerService = container.resolve<HttpListenerModService>(
+      "HttpListenerModService"
+    );
 
-		httpListenerService.registerHttpListener(
-			"ModSyncListener",
-			this.canHandleOverride,
-			this.handleOverride,
-		);
+    httpListenerService.registerHttpListener(
+      "ModSyncListener",
+      this.canHandleOverride,
+      this.handleOverride
+    );
 
-		try {
-			Mod.config = configUtil.load();
-		} catch (e) {
-			Mod.loadFailed = true;
-			logger.error("Corter-ModSync: Failed to load config!");
-			throw e;
-		}
-	}
+    try {
+      Mod.config = configUtil.load();
+    } catch (e) {
+      Mod.loadFailed = true;
+      logger.error("Corter-ModSync: Failed to load config!");
+      throw e;
+    }
 
-	public canHandleOverride(_sessionId: string, req: IncomingMessage): boolean {
-		return !Mod.loadFailed && (req.url?.startsWith("/modsync/") ?? false);
-	}
+    const syncUtil = new SyncUtil(vfs, Mod.config, modImporter, logger);
+    try {
+      syncUtil.initHashModFiles();
+    } catch (e) {
+      Mod.loadFailed = true;
+      logger.error("Corter-ModSync: Failed to initialize hash file!");
+      throw e;
+    }
+  }
 
-	public async handleOverride(
-		_sessionId: string,
-		req: IncomingMessage,
-		res: ServerResponse,
-	): Promise<void> {
-		const logger = Mod.container.resolve<ILogger>("WinstonLogger");
-		const vfs = Mod.container.resolve<VFS>("VFS");
-		const httpFileUtil = Mod.container.resolve<HttpFileUtil>("HttpFileUtil");
-		const modImporter =
-			Mod.container.resolve<PreSptModLoader>("PreSptModLoader");
-		const syncUtil = new SyncUtil(vfs, Mod.config, logger);
-		const router = new Router(
-			Mod.config,
-			syncUtil,
-			vfs,
-			httpFileUtil,
-			modImporter,
-			logger,
-		);
+  public canHandleOverride(_sessionId: string, req: IncomingMessage): boolean {
+    return !Mod.loadFailed && (req.url?.startsWith("/modsync/") ?? false);
+  }
 
-		try {
-			router.handleRequest(req, res);
-		} catch (e) {
-			logger.error("Corter-ModSync: Failed to handle request!");
-			throw e;
-		}
-	}
+  public async handleOverride(
+    _sessionId: string,
+    req: IncomingMessage,
+    res: ServerResponse
+  ): Promise<void> {
+    const logger = Mod.container.resolve<ILogger>("WinstonLogger");
+    const vfs = Mod.container.resolve<VFS>("VFS");
+    const httpFileUtil = Mod.container.resolve<HttpFileUtil>("HttpFileUtil");
+    const modImporter =
+      Mod.container.resolve<PreSptModLoader>("PreSptModLoader");
+    const syncUtil = new SyncUtil(vfs, Mod.config, modImporter, logger);
+    const router = new Router(
+      Mod.config,
+      syncUtil,
+      vfs,
+      httpFileUtil,
+      modImporter,
+      logger
+    );
+
+    try {
+      router.handleRequest(req, res);
+    } catch (e) {
+      logger.error("Corter-ModSync: Failed to handle request!");
+      throw e;
+    }
+  }
 }
 
 export const mod = new Mod();
